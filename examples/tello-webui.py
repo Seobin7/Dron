@@ -7,7 +7,7 @@ from djitellopy import Tello
 import time
 from datetime import datetime
 import numpy as np
-from openai import OpenAI
+import google.generativeai as genai
 from dotenv import load_dotenv
 import base64
 from gtts import gTTS
@@ -17,8 +17,13 @@ import tempfile
 # .env 파일 로드
 load_dotenv()
 
-# OpenAI 클라이언트 초기화
-client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+# Gemini API 초기화
+GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
+if not GOOGLE_API_KEY:
+    raise ValueError(".env 파일에 GOOGLE_API_KEY를 설정해주세요!")
+
+genai.configure(api_key=GOOGLE_API_KEY)
+model = genai.GenerativeModel('gemini-pro-vision')
 
 app = Flask(__name__)
 
@@ -158,31 +163,20 @@ class TelloController:
             raise
 
     def analyze_image(self, image_path: str) -> str:
-        """GPT Vision으로 이미지 분석"""
+        """Gemini Vision으로 이미지 분석"""
         try:
+            # 이미지를 base64로 인코딩
             with open(image_path, "rb") as image_file:
-                base64_image = base64.b64encode(image_file.read()).decode('utf-8')
-                
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": "이 이미지에서 보이는 것을 자세히 설명해주세요."},
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{base64_image}"
-                                }
-                            }
-                        ]
-                    }
-                ],
-                max_tokens=500
-            )
+                image_bytes = image_file.read()
             
-            return response.choices[0].message.content
+            # Gemini Vision API 호출
+            response = model.generate_content([
+                "이 이미지에서 보이는 것을 자세히 설명해주세요.",
+                {"mime_type": "image/jpeg", "data": image_bytes}
+            ])
+            
+            return response.text
+            
         except Exception as e:
             print(f"이미지 분석 오류: {str(e)}")
             return f"이미지 분석 중 오류가 발생했습니다: {str(e)}"
